@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Month at a Glance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@500;600;800&display=swap">
+<style>
+/* VOICE work, glanceable from across a room
+   IDEA a single ruled bar like a fuel gauge: this month's pay, eaten by bills from the left
+   PICTURE one wide bar split into paid, still due, everyday spending and what's left
+   COLOUR white or night ground, black ink, red out, amber everyday, blue for what's left
+   TYPE Figtree 800 figures, Figtree text
+   LAYOUT one screen: number and bar on top, bills in columns below; phone stacks and scrolls
+   DATA lives in data.json beside this page, encrypted (AES-GCM, key from the password via PBKDF2) */
+:root{color-scheme:light dark;--bg:light-dark(#fff,#0e1116);--ink:light-dark(#111418,#eef1f5);--mute:light-dark(#5b6370,#9aa3b0);--line:light-dark(#e3e6ea,#262b33);--panel:light-dark(#f4f5f7,#181c23);--out:light-dark(#e6261f,#ff5a4f);--left:light-dark(#0a5cff,#6b97ff);--est:#ffb400}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:16px/1.4 Figtree,system-ui,sans-serif;overflow-x:clip}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;min-height:44px;border-radius:10px;border:1px solid var(--line);background:var(--bg);padding:0 14px;font-weight:600}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--left);outline-offset:2px}
+input,select{font-size:16px;min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:0 10px;width:100%}
+[hidden]{display:none!important}
+.app{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;gap:clamp(14px,2.4vh,28px);padding:clamp(16px,3vh,32px) max(4vw,16px);max-width:1400px;margin:0 auto}
+.hd{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.hd h1{margin:0;font-size:clamp(26px,3.2vw,38px);letter-spacing:-.02em;font-weight:800;line-height:1.05}
+.hd h1 span{color:var(--mute);font-weight:600}
+.btns{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#status{color:var(--mute);font-size:14px}
+.pri{background:var(--left);border-color:var(--left);color:#fff}
+.hero{display:grid;grid-template-columns:auto minmax(0,1fr);gap:clamp(20px,4vw,56px);align-items:end}
+.big{font-weight:800;font-size:clamp(56px,10vh,120px);line-height:.95;letter-spacing:-.035em;color:var(--left);white-space:nowrap}
+.big.neg{color:var(--out)}
+.sub{font-weight:600;font-size:18px;margin-top:6px}
+.gauge{height:clamp(44px,7vh,68px);display:flex;border-radius:12px;overflow:hidden;background:var(--panel)}
+.gauge i{display:block;height:100%}
+.legend{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:12px}
+.legend div{border-top:3px solid;padding-top:6px}
+.legend b{display:block;font-size:clamp(20px,2.4vw,28px);font-weight:800;white-space:nowrap}
+.legend span{font-size:14px;color:var(--mute)}
+.inc{font-size:15px;color:var(--mute);margin-top:8px}
+.bills{display:grid;grid-template-rows:auto minmax(0,1fr);border-top:2px solid var(--ink)}
+.bh{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:8px 0}
+.bh h2{margin:0;font-size:18px}
+.bh span{color:var(--mute);font-size:14px}
+.list{display:grid;grid-auto-flow:column;grid-template-rows:repeat(var(--r),minmax(40px,64px));align-content:start;column-gap:clamp(16px,3vw,40px);min-height:0}
+.b{display:grid;grid-template-columns:2.2em minmax(0,1fr) auto;align-items:center;gap:10px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:none;text-align:left;padding:0 4px;min-height:40px;font-weight:500}
+.ro .b{cursor:default}
+.b .d{font-weight:800;font-size:20px;color:var(--mute);text-align:right}
+.b .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.b .v{font-weight:800;white-space:nowrap}
+.b.p .n,.b.p .v{color:var(--mute)}
+.b.p .v{text-decoration:line-through}
+.b.p .d::after{content:"✓";color:var(--left);font-size:14px;margin-left:2px}
+.b.late .d{color:var(--out)}
+.tag{font-size:12px;font-weight:700;background:color-mix(in srgb,var(--est) 30%,transparent);border-radius:20px;padding:1px 7px;margin-left:6px}
+.ft{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--mute)}
+.link{border:0;background:none;color:var(--mute);text-decoration:underline;min-height:32px;padding:0;font-weight:500;font-size:13px}
+.gate{min-height:100%;display:grid;place-items:center;padding:24px 16px}
+.card{width:min(440px,100%)}
+.card h1{font-size:34px;letter-spacing:-.02em;margin:0 0 6px;line-height:1.05}
+.card label{display:block;font-weight:600;font-size:15px;margin:16px 0 6px}
+.card .row{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap}
+.chk{display:flex;gap:8px;align-items:center;font-size:15px;font-weight:500!important}
+.chk input{width:22px;min-height:22px}
+.err{color:var(--out);font-weight:600;min-height:1.4em;margin:10px 0 0}
+.note{color:var(--mute);font-size:14px;margin:4px 0 0}
+.note a{color:inherit}
+.ov{position:fixed;inset:0;background:color-mix(in srgb,#000 45%,transparent);display:flex;align-items:flex-start;justify-content:center;padding:20px 12px;overflow:auto;z-index:9}
+.sheet{background:var(--bg);border-radius:16px;width:min(760px,100%);padding:20px clamp(14px,3vw,28px) 24px}
+.sheet h2{margin:0;font-size:24px}
+.sheet h3{margin:20px 0 6px;font-size:17px;display:flex;justify-content:space-between;align-items:center}
+.er{display:grid;grid-template-columns:minmax(0,1fr) 7em 5em 7.5em 44px;gap:8px;align-items:center;padding:5px 0}
+.pay{display:grid;grid-template-columns:7em 10em minmax(0,1fr);gap:8px}
+.x{width:44px;padding:0;border-color:transparent;color:var(--mute)}
+.acts{display:flex;justify-content:space-between;gap:10px;margin-top:22px;flex-wrap:wrap}
+@media(max-width:820px){.hero{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:600px){html,body{height:auto}.app{height:auto}.legend{grid-template-columns:repeat(2,minmax(0,1fr))}.list{grid-auto-flow:row;grid-template-rows:none}.b{min-height:48px}.er{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 44px}.er>:first-child{grid-column:1/-1}.pay{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.pay>:last-child{grid-column:1/-1}}
+</style>
+</head>
+<body>
+
+<div class="gate" id="lock" hidden><form class="card" id="lf">
+  <h1>Month at a Glance</h1>
+  <p class="note">Enter the household password.</p>
+  <label for="lp">Password</label>
+  <input id="lp" type="password" autocomplete="current-password" required>
+  <label class="chk"><input id="lr" type="checkbox" checked> Remember on this device</label>
+  <p class="err" id="le"></p>
+  <div class="row"><button class="pri" type="submit" id="lb">Unlock</button></div>
+</form></div>
+
+<div class="gate" id="setup" hidden><form class="card" id="sf">
+  <h1>Set up</h1>
+  <p class="note" id="sn">No data yet. Connect this device to GitHub so it can save, then choose the household password.</p>
+  <label for="gt">GitHub token</label>
+  <input id="gt" type="password" autocomplete="off" placeholder="github_pat_…">
+  <p class="note">A fine-grained token for this one repository, with Contents set to Read and write. It stays on this device only.</p>
+  <label for="gr">Repository</label>
+  <input id="gr" placeholder="username/repo">
+  <label for="gp">Data file path in the repository</label>
+  <input id="gp" placeholder="data.json">
+  <div id="pwbox">
+    <label for="s1">Household password</label>
+    <input id="s1" type="password" autocomplete="new-password">
+    <label for="s2">Same password again</label>
+    <input id="s2" type="password" autocomplete="new-password">
+    <p class="note">Use four or five random words. It can't be recovered, and a short one can be guessed.</p>
+  </div>
+  <p class="err" id="se"></p>
+  <div class="row"><button class="pri" type="submit" id="sb">Save</button><button type="button" id="sc">Cancel</button></div>
+</form></div>
+
+<div class="app" id="app" hidden>
+  <div class="hd">
+    <h1 id="mon">This month</h1>
+    <div class="btns"><span id="status"></span><button id="priv">Hide amounts</button><button id="edit" class="pri" hidden>Edit</button></div>
+  </div>
+  <div class="hero">
+    <div><div class="big" id="left">$0</div><div class="sub">left this month</div></div>
+    <div>
+      <div class="gauge" id="gauge" role="img" aria-label="How this month's income is split"></div>
+      <div class="legend" id="legend"></div>
+      <div class="inc" id="inc"></div>
+    </div>
+  </div>
+  <section class="bills">
+    <div class="bh"><h2>Bills</h2><span id="hint"></span></div>
+    <div class="list" id="list"></div>
+  </section>
+  <div class="ft"><span id="upd"></span><span><button class="link" id="edsign">Editor sign-in</button> · <button class="link" id="out">Lock this device</button></span></div>
+</div>
+
+<div class="ov" id="sheet" hidden><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sht">
+  <h2 id="sht">Edit</h2>
+  <p class="note" id="smp">Sample figures. Replace them with yours.</p>
+  <h3>Take-home pay</h3>
+  <div class="pay"><input id="pa" type="number" inputmode="decimal" placeholder="Amount" aria-label="Pay amount"><select id="pf" aria-label="How often"><option value="biweekly">Every 2 weeks</option><option value="monthly">Monthly</option><option value="semimonthly">1st and 15th</option></select><input id="pd" aria-label="A recent payday, or day of month"></div>
+  <p class="note" id="pdn"></p>
+  <h3>Everyday spending this month</h3>
+  <input id="ev" type="number" inputmode="decimal" placeholder="Groceries, gas, eating out so far" aria-label="Everyday spending this month" style="max-width:16em">
+  <h3>Bills <button type="button" id="addb">Add bill</button></h3>
+  <div id="eb"></div>
+  <div class="acts"><button type="button" id="cancel">Cancel</button><button type="button" id="save" class="pri">Save</button></div>
+</div></div>
+
+<script>
+{
+const $=s=>document.querySelector(s);
+const TE=new TextEncoder(),TD=new TextDecoder(),ITER=600000;
+const b64=u=>{let s='';for(let i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);return btoa(s)};
+const ub64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+const store={get:k=>{try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}},set:(k,v)=>{try{v==null?localStorage.removeItem(k):localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const MON=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const money=v=>(v<-.5?'−':'')+'$'+Math.abs(Math.round(v)).toLocaleString('en-US');
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const uid=()=>Math.random().toString(36).slice(2,9);
+let S=null,KEY=null,SALT=null,SHA=null,ENV=null,C=null,D=null,tmr=null,busy=false,priv=store.get('mag-priv')===true;
+const ed=()=>store.get('mag-editor');
+const show=id=>{['lock','setup','app'].forEach(x=>$('#'+x).hidden=x!==id)};
+
+async function derive(pw,salt){const base=await crypto.subtle.importKey('raw',TE.encode(pw),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt:ub64(salt),iterations:ITER,hash:'SHA-256'},base,{name:'AES-GCM',length:256},true,['encrypt','decrypt'])}
+async function seal(obj){const iv=crypto.getRandomValues(new Uint8Array(12));
+  const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},KEY,TE.encode(JSON.stringify(obj))));
+  return{v:1,kdf:'PBKDF2-SHA256',iter:ITER,salt:SALT,iv:b64(iv),ct:b64(ct)}}
+async function unseal(env,key){return JSON.parse(TD.decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:ub64(env.iv)},key,ub64(env.ct))))}
+async function remember(){const raw=new Uint8Array(await crypto.subtle.exportKey('raw',KEY));store.set('mag-key',{salt:SALT,k:b64(raw)})}
+async function recall(salt){const r=store.get('mag-key');if(!r||r.salt!==salt)return null;
+  return crypto.subtle.importKey('raw',ub64(r.k),{name:'AES-GCM'},true,['encrypt','decrypt'])}
+
+const api=e=>`https://api.github.com/repos/${e.repo}/contents/${e.path.split('/').map(encodeURIComponent).join('/')}`;
+const hdr=e=>({Authorization:'Bearer '+e.token,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'});
+async function fetchEnv(){const e=ed();
+  if(e){const r=await fetch(api(e)+'?t='+Date.now(),{headers:hdr(e),cache:'no-store'});
+    if(r.status===404){SHA=null;return null}
+    if(r.status===401||r.status===403)throw new Error('GitHub refused the token. Check it in Editor sign-in.');
+    if(!r.ok)throw new Error('GitHub error '+r.status);
+    const j=await r.json();SHA=j.sha;return JSON.parse(atob(j.content.replace(/\s/g,'')))}
+  const r=await fetch('data.json?t='+Date.now(),{cache:'no-store'});
+  if(r.status===404)return null;if(!r.ok)throw new Error('Could not load data ('+r.status+')');return r.json()}
+async function push(retry){const e=ed();if(!e)throw new Error('This device is not signed in as editor');
+  const body={message:'Update '+new Date().toISOString().slice(0,16).replace('T',' '),content:btoa(JSON.stringify(await seal(S)))};if(SHA)body.sha=SHA;
+  const r=await fetch(api(e),{method:'PUT',headers:{...hdr(e),'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if((r.status===409||r.status===422)&&!retry){await fetchEnv();return push(true)}
+  if(!r.ok)throw new Error(r.status===401||r.status===403||r.status===404?'GitHub refused the save. Check the token and repository.':'GitHub error '+r.status);
+  SHA=(await r.json()).content.sha}
+
+function sample(){const t=new Date(),K=t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0'),d=t.getDate();
+  const bills=[['Mortgage',3150,1],['Streaming',45,5],['Internet',80,8],['Car insurance',160,12],['Tuition',1850,15],['Electric',140,18,1],['Phones',95,20],['Gas (heating)',85,22,1],['Water and sewer',70,25,1],['Life insurance',60,28]].map(b=>({id:uid(),name:b[0],amt:b[1],day:b[2],est:!!b[3]}));
+  return{sample:true,savedAt:Date.now(),pay:{amt:4600,freq:'biweekly',anchor:K+'-06',day:1},spend:{[K]:Math.round(d*38)},bills,paid:{[K]:bills.filter(b=>b.day<d).map(b=>b.id)}}}
+
+function paydays(p,y,m){const n=new Date(y,m+1,0).getDate();
+  if(p.freq==='monthly')return[Math.min(+p.day||1,n)];
+  if(p.freq==='semimonthly')return[1,15];
+  if(!p.anchor)return[];const a=p.anchor.split('-').map(Number),dn=(Y,M,d)=>Math.round(Date.UTC(Y,M,d)/864e5);
+  const A=dn(a[0],a[1]-1,a[2]),s=dn(y,m,1),e=dn(y,m,n),o=[];for(let t=A+Math.ceil((s-A)/14)*14;t<=e;t+=14)o.push(t-s+1);return o}
+function calc(){const t=new Date(),y=t.getFullYear(),m=t.getMonth(),K=y+'-'+String(m+1).padStart(2,'0'),n=new Date(y,m+1,0).getDate();
+  const P=(S.paid||{})[K]||[],pays=paydays(S.pay||{},y,m),I=pays.length*(+(S.pay||{}).amt||0);
+  const bills=(S.bills||[]).map(b=>({...b,d:Math.min(+b.day||1,n),p:P.includes(b.id),v:+b.amt||0})).sort((a,b)=>a.d-b.d);
+  const paid=bills.filter(b=>b.p).reduce((s,b)=>s+b.v,0),due=bills.filter(b=>!b.p).reduce((s,b)=>s+b.v,0),E=+((S.spend||{})[K]||0);
+  return{y,m,K,today:t.getDate(),pays,I,bills,paid,due,E,left:I-paid-due-E}}
+const f=v=>priv?(C.I?Math.round(v/C.I*100)+'%':'—'):money(v);
+function render(){if(!S)return;C=calc();const E=!!ed();
+  $('#app').classList.toggle('ro',!E);$('#edit').hidden=!E;$('#edsign').textContent=E?'Editor settings':'Editor sign-in';
+  $('#hint').textContent=E?'Tap a bill when it\'s paid':'';
+  $('#mon').innerHTML=`${MON[C.m]} <span>${C.y}</span>`;
+  $('#priv').textContent=priv?'Show amounts':'Hide amounts';
+  if(!busy&&!$('#status').dataset.err)$('#status').textContent=S.sample?'Sample figures':'';
+  const L=$('#left');L.textContent=f(C.left);L.classList.toggle('neg',C.left<0);
+  const parts=[['Paid','var(--out)',C.paid,''],['Still due','var(--out)',C.due,'repeating-linear-gradient(135deg,var(--out) 0 8px,color-mix(in srgb,var(--out) 35%,var(--panel)) 8px 16px)'],['Everyday','var(--est)',C.E,''],['Left','var(--left)',Math.max(C.left,0),'']];
+  const tot=Math.max(C.I,C.paid+C.due+C.E,1);
+  $('#gauge').innerHTML=parts.map(p=>`<i title="${p[0]}" style="width:${p[2]/tot*100}%;background:${p[3]||p[1]}"></i>`).join('');
+  $('#legend').innerHTML=parts.map((p,i)=>`<div style="border-color:${p[1]}"><b>${f(i===3?C.left:p[2])}</b><span>${p[0]}</span></div>`).join('');
+  const got=C.pays.filter(d=>d<=C.today).length;
+  $('#inc').textContent=`Income ${f(C.I)} from ${C.pays.length} ${C.pays.length===1?'paycheck':'paychecks'}, ${got} received so far`;
+  const r=Math.max(1,Math.ceil(C.bills.length/(innerWidth>1000?3:innerWidth>600?2:1)));
+  const li=$('#list');li.style.setProperty('--r',r);
+  li.innerHTML=C.bills.map(b=>`<button class="b${b.p?' p':''}${!b.p&&b.d<C.today?' late':''}" data-id="${b.id}" aria-pressed="${b.p}"${E?'':' tabindex="-1"'}><span class="d">${b.d}</span><span class="n">${esc(b.name)}${b.est&&!b.p?'<span class="tag">est.</span>':''}</span><span class="v">${f(b.v)}</span></button>`).join('')||'<p class="note">No bills yet.</p>';
+  $('#upd').textContent=S.savedAt?'Last updated '+new Date(S.savedAt).toLocaleString('en-US',{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):''}
+
+function setStatus(t,err){const s=$('#status');s.textContent=t;if(err)s.dataset.err='1';else delete s.dataset.err}
+function save(){S.savedAt=Date.now();clearTimeout(tmr);setStatus('Saving…');busy=true;tmr=setTimeout(async()=>{try{await push();setStatus('Saved')}catch(e){setStatus(e.message,true)}busy=false},900)}
+
+async function boot(){
+  try{ENV=await fetchEnv()}catch(e){show('lock');$('#le').textContent=e.message;return}
+  if(!ENV){if(ed())return openSetup(true);show('lock');$('#lf').hidden=false;$('#lp').disabled=true;$('#lb').disabled=true;$('#le').textContent='Nothing here yet. The owner needs to finish setup.';$('#lf').insertAdjacentHTML('beforeend','<p class="note"><button type="button" class="link" id="lsetup">I\'m the owner: set up</button></p>');$('#lsetup').onclick=()=>openSetup(true);return}
+  SALT=ENV.salt;const k=await recall(SALT);
+  if(k){try{S=await unseal(ENV,k);KEY=k;show('app');render();return}catch(e){store.set('mag-key',null)}}
+  show('lock');$('#lp').focus()}
+async function refresh(){if(!KEY||busy||!$('#sheet').hidden)return;try{const env=await fetchEnv();if(env&&env.salt===SALT){S=await unseal(env,KEY);ENV=env}render()}catch(e){render()}}
+
+$('#lf').onsubmit=async e=>{e.preventDefault();$('#le').textContent='';$('#lb').disabled=true;$('#lb').textContent='Unlocking…';
+  try{const k=await derive($('#lp').value,ENV.salt);S=await unseal(ENV,k);KEY=k;SALT=ENV.salt;if($('#lr').checked)await remember();$('#lp').value='';show('app');render()}
+  catch(err){$('#le').textContent='That password didn\'t work.'}
+  $('#lb').disabled=false;$('#lb').textContent='Unlock'};
+
+function guess(){const h=location.hostname,o=h.endsWith('.github.io')?h.split('.')[0]:'',seg=location.pathname.split('/').filter(Boolean);if(seg.length&&/\.html?$/.test(seg[seg.length-1]))seg.pop();
+  if(!o)return{repo:'',path:'data.json'};if(!seg.length)return{repo:`${o}/${h}`,path:'data.json'};return{repo:`${o}/${seg[0]}`,path:[...seg.slice(1),'data.json'].join('/')}}
+let setupNew=false;
+function openSetup(isNew){setupNew=isNew;const e=ed()||guess();
+  $('#gt').value=(ed()||{}).token||'';$('#gr').value=e.repo||'';$('#gp').value=e.path||'data.json';
+  $('#pwbox').hidden=!isNew;$('#sn').textContent=isNew?'No data yet. Connect this device to GitHub so it can save, then choose the household password.':'Connect this device to GitHub so it can save changes. Viewers never need this.';
+  $('#sc').hidden=isNew&&!KEY;$('#se').textContent='';show('setup')}
+$('#sc').onclick=()=>{if(S)show('app');else boot()};
+$('#sf').onsubmit=async e=>{e.preventDefault();const se=$('#se'),sb=$('#sb');se.textContent='';
+  const cfg={token:$('#gt').value.trim(),repo:$('#gr').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\/$/,''),path:($('#gp').value.trim()||'data.json').replace(/^\//,'')};
+  if(!cfg.token||!/^[\w.-]+\/[\w.-]+$/.test(cfg.repo)){se.textContent='Add the token and the repository as username/repo.';return}
+  sb.disabled=true;sb.textContent='Checking…';const prev=ed();store.set('mag-editor',cfg);
+  try{const env=await fetchEnv();
+    if(env){ENV=env;SALT=env.salt;if(KEY&&SALT===ENV.salt){S=await unseal(ENV,KEY);show('app');render()}else{KEY=null;S=null;show('lock')}}
+    else{const p1=$('#s1').value;if(!setupNew){openSetup(true);sb.disabled=false;sb.textContent='Save';$('#se').textContent='No data file there yet, so choose a password to create it.';return}
+      if(p1.length<12){throw new Error('Use a longer password: at least 12 characters, ideally four or five words.')}
+      if(p1!==$('#s2').value)throw new Error('The two passwords don\'t match.');
+      sb.textContent='Encrypting…';SALT=b64(crypto.getRandomValues(new Uint8Array(16)));KEY=await derive(p1,SALT);S=sample();
+      await push();await remember();$('#s1').value=$('#s2').value='';show('app');render();setStatus('Saved')}}
+  catch(err){if(!S)store.set('mag-editor',prev);se.textContent=err.message}
+  sb.disabled=false;sb.textContent='Save'};
+$('#edsign').onclick=()=>openSetup(false);
+$('#out').onclick=()=>{store.set('mag-key',null);store.set('mag-editor',null);KEY=null;S=null;location.reload()};
+
+$('#list').onclick=e=>{if(!ed())return;const b=e.target.closest('[data-id]');if(!b)return;S.paid=S.paid||{};const P=S.paid[C.K]||(S.paid[C.K]=[]),i=P.indexOf(b.dataset.id);i<0?P.push(b.dataset.id):P.splice(i,1);save();render()};
+$('#priv').onclick=()=>{priv=!priv;store.set('mag-priv',priv);render()};
+function payField(){const fq=$('#pf').value,pd=$('#pd');pd.disabled=false;
+  if(fq==='biweekly'){pd.type='date';pd.value=D.pay.anchor||C.K+'-01';$('#pdn').textContent='Pick any recent payday and the page works out the rest.'}
+  else if(fq==='monthly'){pd.type='number';pd.min=1;pd.max=31;pd.value=D.pay.day||1;$('#pdn').textContent='Day of the month you\'re paid.'}
+  else{pd.type='text';pd.value='1st and 15th';pd.disabled=true;$('#pdn').textContent=''}}
+function sheetRows(){$('#eb').innerHTML=D.bills.map((b,i)=>`<div class="er" data-i="${i}"><input data-f="name" value="${esc(b.name)}" placeholder="Bill" aria-label="Bill name"><input data-f="amt" type="number" inputmode="decimal" value="${esc(b.amt)}" placeholder="Amount" aria-label="Amount"><input data-f="day" type="number" min="1" max="31" value="${esc(b.day)}" placeholder="Day" aria-label="Day of month"><label class="chk"><input type="checkbox" data-f="est"${b.est?' checked':''}>Estimate</label><button type="button" class="x" data-rm aria-label="Remove">✕</button></div>`).join('')}
+$('#edit').onclick=()=>{D=JSON.parse(JSON.stringify(S));D.pay=D.pay||{};D.spend=D.spend||{};D.bills=D.bills||[];$('#smp').hidden=!S.sample;$('#pa').value=D.pay.amt||'';$('#pf').value=D.pay.freq||'biweekly';$('#ev').value=D.spend[C.K]||'';payField();sheetRows();$('#sheet').hidden=false};
+$('#pf').onchange=payField;
+$('#eb').addEventListener('input',e=>{const el=e.target,r=el.closest('.er');if(!r||!el.dataset.f||el.type==='checkbox')return;D.bills[+r.dataset.i][el.dataset.f]=el.type==='number'?+el.value:el.value});
+$('#eb').addEventListener('change',e=>{const el=e.target;if(el.type==='checkbox')D.bills[+el.closest('.er').dataset.i].est=el.checked});
+$('#eb').addEventListener('click',e=>{const r=e.target.closest('[data-rm]');if(r){D.bills.splice(+r.closest('.er').dataset.i,1);sheetRows()}});
+$('#addb').onclick=()=>{D.bills.push({id:uid(),name:'',amt:'',day:1});sheetRows();const L=document.querySelectorAll('#eb [data-f="name"]');L[L.length-1].focus()};
+$('#cancel').onclick=()=>{$('#sheet').hidden=true};
+$('#save').onclick=()=>{const fq=$('#pf').value,pd=$('#pd').value;D.pay={amt:+$('#pa').value||0,freq:fq,anchor:fq==='biweekly'?pd:D.pay.anchor,day:fq==='monthly'?+pd:D.pay.day};
+  D.spend[C.K]=+$('#ev').value||0;D.bills=D.bills.filter(b=>b.name||b.amt);D.sample=false;S=D;$('#sheet').hidden=true;save();render()};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')$('#sheet').hidden=true});
+let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(render,150)});
+setInterval(refresh,5*60e3);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh()});
+if(!window.crypto||!crypto.subtle){document.body.innerHTML='<p style="padding:24px">This page needs HTTPS to unlock.</p>'}else boot();
+}
+</script>
+</body>
+</html>
